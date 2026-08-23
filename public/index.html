@@ -3,130 +3,142 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>On Air</title>
+<title>777 Radio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0b0b0d;
-    --card: #16161a;
-    --accent: #ff4d4d;
-    --text: #f2f2f2;
-    --muted: #8a8a8f;
+    --ink: #1b3a2b;
+    --ink-soft: #5c7864;
+    --ribbon: #d2352c;
   }
   * { box-sizing: border-box; }
-  body {
+  html, body {
+    height: 100%;
     margin: 0;
+  }
+  body {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at top, #1a1a1f, var(--bg) 60%);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--text);
+    background: #ffffff;
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    color: var(--ink);
+    padding: 24px;
   }
-  .card {
-    width: 100%;
-    max-width: 420px;
-    padding: 32px 28px;
-    background: var(--card);
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+
+  .page {
+    width: min(92vw, 720px);
+  }
+
+  .hint-text {
     text-align: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    height: 18px;
+    margin-bottom: 4px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
   }
-  .on-air-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255,77,77,0.12);
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    margin-bottom: 20px;
+  .hint-text.hidden {
+    opacity: 0;
   }
-  .dot {
-    width: 8px;
-    height: 8px;
+
+  .dot-row {
+    display: flex;
+    justify-content: center;
+    height: 20px;
+    margin-bottom: 6px;
+  }
+  .on-air-dot {
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
-    background: var(--accent);
-    animation: pulse 1.4s ease-in-out infinite;
+    background: var(--ribbon);
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .on-air-dot.live {
+    opacity: 1;
+    transform: scale(1);
+    animation: pulse 1.8s ease-in-out infinite;
   }
   @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    50% { opacity: 0.4; }
   }
-  .title {
-    font-size: 24px;
-    font-weight: 700;
-    margin: 0 0 4px;
-    line-height: 1.3;
-  }
-  .artist {
-    font-size: 15px;
-    color: var(--muted);
-    margin: 0 0 24px;
-  }
-  .progress-wrap {
+
+  .art-wrap {
+    position: relative;
     width: 100%;
-    height: 4px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-  .progress-bar {
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    transition: width 1s linear;
-  }
-  .time-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 28px;
-  }
-  button#playBtn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    font-size: 22px;
+    aspect-ratio: 1600 / 935;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(255,77,77,0.35);
-    transition: transform 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
   }
-  button#playBtn:active { transform: scale(0.94); }
-  .up-next {
-    margin-top: 28px;
-    padding-top: 18px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    font-size: 13px;
-    color: var(--muted);
+  .art-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
   }
-  .up-next b { color: var(--text); }
+  .vu-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    mask-image: url('/assets/station-mask.png');
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: url('/assets/station-mask.png');
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+  }
+  .vu-overlay.active {
+    opacity: 1;
+  }
+
+  .meta {
+    text-align: center;
+    margin-top: 22px;
+    min-height: 1.4em;
+  }
+  .meta .title {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.4;
+  }
+
   .status-msg {
-    color: var(--muted);
-    font-size: 14px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-top: 22px;
   }
-  .file-meta {
-    margin-top: 18px;
-    font-size: 11px;
-    color: var(--muted);
-    word-break: break-all;
+
+  @media (prefers-reduced-motion: reduce) {
+    .on-air-dot.live { animation: none; }
   }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="on-air-badge"><span class="dot"></span> ON AIR</div>
-    <div id="content">
-      <p class="status-msg">Tuning in…</p>
+  <div class="page">
+    <div class="hint-text" id="hintText">click to play</div>
+    <div class="dot-row"><span class="on-air-dot" id="onAirDot"></span></div>
+    <div class="art-wrap" id="artWrap" title="Play / pause">
+      <img class="art-photo" src="/assets/station-art.jpg" alt="777 Radio">
+      <canvas class="vu-overlay" id="vuCanvas"></canvas>
     </div>
+    <div class="meta" id="meta"></div>
   </div>
 
 <script>
@@ -134,8 +146,150 @@ const audio = new Audio();
 audio.preload = 'auto';
 let currentTrackId = null;
 let started = false;
+let latestData = null;
 
-const content = document.getElementById('content');
+// --- Web Audio + canvas VU visualizer ---
+let audioCtx = null;
+let analyser = null;
+let freqData = null;
+let vuRafId = null;
+const canvas = document.getElementById('vuCanvas');
+const ctx = canvas.getContext('2d');
+const BARS_PER_GLYPH = 14;
+const BAR_GAP_RATIO = 0.35;
+
+// Per-glyph automatic gain: each "7" tracks its own recent peak loudness and
+// normalizes against it, so all three fill their own range based on their
+// own content - rather than a fixed multiplier, which either leaves quiet
+// bands looking dead or blows out already-loud ones once they saturate.
+const glyphPeaks = [30, 30, 30]; // small floor avoids amplifying near-silence into noise
+const PEAK_DECAY = 0.985;
+
+// Precise per-bar anchoring: for each of the 14 x-slices of each "7", the
+// actual top/bottom of that numeral's silhouette at that x-position (as
+// fractions of the artwork image, 1600x935). A "7" is diagonal, so this
+// varies a lot slice to slice — using it (rather than one bounding box per
+// glyph) means every bar fills real numeral space instead of mostly empty
+// bounding-box corners.
+const GLYPHS = [
+  {x0:0.0657,x1:0.3222,slots:[{t:0.2864,b:0.3525},{t:0.2156,b:0.3523},{t:0.1969,b:0.6432},{t:0.1956,b:0.6432},{t:0.1956,b:0.6429},{t:0.1956,b:0.6424},{t:0.1964,b:0.6426},{t:0.1964,b:0.6434},{t:0.1972,b:0.6434},{t:0.1982,b:0.5781},{t:0.1993,b:0.5034},{t:0.2006,b:0.4286},{t:0.2011,b:0.3528},{t:0.2017,b:0.2812}]},
+  {x0:0.3192,x1:0.5788,slots:[{t:0.2754,b:0.3544},{t:0.203,b:0.3546},{t:0.1951,b:0.6603},{t:0.1956,b:0.6619},{t:0.1964,b:0.6634},{t:0.1972,b:0.6634},{t:0.198,b:0.6626},{t:0.1985,b:0.6611},{t:0.199,b:0.6595},{t:0.1993,b:0.5871},{t:0.1993,b:0.5071},{t:0.2001,b:0.4286},{t:0.2003,b:0.3528},{t:0.1993,b:0.2791}]},
+  {x0:0.5962,x1:0.8606,slots:[{t:0.2714,b:0.3499},{t:0.1993,b:0.3515},{t:0.1917,b:0.353},{t:0.1922,b:0.6508},{t:0.193,b:0.6526},{t:0.1935,b:0.6553},{t:0.194,b:0.6579},{t:0.1959,b:0.6595},{t:0.1977,b:0.6574},{t:0.1985,b:0.5971},{t:0.2001,b:0.5128},{t:0.2009,b:0.4344},{t:0.2017,b:0.3596},{t:0.2025,b:0.2849}]}
+];
+
+function sizeCanvas() {
+  const wrap = document.getElementById('artWrap');
+  const rect = wrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', sizeCanvas);
+sizeCanvas();
+
+function setupAnalyser() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaElementSource(audio);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.8;
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+}
+
+// Compute log-spaced bin boundaries across [0, binCount) so each of `numBars`
+// groups covers a musically even slice of the spectrum (low bars = a couple
+// bass bins, high bars = a wide swath of treble bins) rather than plain
+// linear division, which is dominated entirely by the first few bass bins.
+function logBinEdges(numBars, binCount) {
+  const edges = [0];
+  const minBin = 1; // avoid log(0)
+  for (let i = 1; i <= numBars; i++) {
+    const frac = i / numBars;
+    const bin = Math.round(minBin * Math.pow(binCount / minBin, frac));
+    edges.push(Math.min(binCount, Math.max(edges[i - 1] + 1, bin)));
+  }
+  return edges;
+}
+
+function drawBars() {
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!analyser) return;
+  analyser.getByteFrequencyData(freqData);
+
+  ctx.fillStyle = '#1b3a2b';
+
+  // The full spectrum is split sequentially across all three glyphs (left =
+  // bass, middle = mids, right = treble) so each numeral represents a
+  // distinct band. Each glyph then self-normalizes against its own recent
+  // peak (see glyphPeaks) so all three genuinely respond to their own
+  // content, regardless of how much raw energy that band naturally carries.
+  const totalBars = GLYPHS.length * BARS_PER_GLYPH;
+  const nyquistBins = freqData.length;
+  const binEdges = logBinEdges(totalBars, nyquistBins);
+
+  let barIndex = 0;
+
+  GLYPHS.forEach((glyph, glyphIdx) => {
+    const gx0 = glyph.x0 * w;
+    const gx1 = glyph.x1 * w;
+    const glyphWidth = gx1 - gx0;
+    const barSlot = glyphWidth / BARS_PER_GLYPH;
+    const barWidth = barSlot * (1 - BAR_GAP_RATIO);
+
+    // First pass: compute this glyph's raw bar values and its current max
+    const rawAvgs = [];
+    for (let i = 0; i < BARS_PER_GLYPH; i++) {
+      const startBin = binEdges[barIndex + i];
+      const endBin = binEdges[barIndex + i + 1];
+      let sum = 0;
+      let count = 0;
+      for (let b = startBin; b < endBin; b++) { sum += freqData[b] || 0; count++; }
+      rawAvgs.push(count ? sum / count : 0);
+    }
+    barIndex += BARS_PER_GLYPH;
+
+    const frameMax = Math.max(...rawAvgs);
+    // Peak rises instantly to a new loud moment, decays slowly otherwise -
+    // this is what lets a quiet band (like treble) still hit full height
+    // during its own loudest moments, without permanently amplifying hiss.
+    glyphPeaks[glyphIdx] = Math.max(frameMax, glyphPeaks[glyphIdx] * PEAK_DECAY);
+
+    for (let i = 0; i < BARS_PER_GLYPH; i++) {
+      const normalized = Math.min(255, (rawAvgs[i] / glyphPeaks[glyphIdx]) * 255);
+
+      const slot = glyph.slots[i];
+      const slotTop = slot.t * h;
+      const slotBottom = slot.b * h;
+      const slotHeight = slotBottom - slotTop;
+
+      const barHeight = Math.max(2, Math.min(slotHeight, (normalized / 255) * slotHeight * 1.05));
+      const x = gx0 + i * barSlot + (barSlot - barWidth) / 2;
+      const y = slotBottom - barHeight;
+      ctx.fillRect(x, y, barWidth, barHeight);
+    }
+  });
+
+  vuRafId = requestAnimationFrame(drawBars);
+}
+
+function startVu() {
+  document.getElementById('vuCanvas').classList.add('active');
+  if (vuRafId) cancelAnimationFrame(vuRafId);
+  drawBars();
+}
+function stopVu() {
+  if (vuRafId) cancelAnimationFrame(vuRafId);
+  vuRafId = null;
+  document.getElementById('vuCanvas').classList.remove('active');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
 
 function fmtTime(sec) {
   if (!isFinite(sec) || sec < 0) sec = 0;
@@ -144,71 +298,76 @@ function fmtTime(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function render(data) {
-  if (data.status === 'empty') {
-    content.innerHTML = '<p class="status-msg">Nothing in rotation yet. Check back soon.</p>';
-    return;
-  }
-
-  const pct = Math.min(100, (data.positionInTrack / data.duration) * 100);
-
-  content.innerHTML = `
-    <h1 class="title">${escapeHtml(data.title)}</h1>
-    <p class="artist">${escapeHtml(data.artist)}</p>
-    <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
-    <div class="time-row">
-      <span>${fmtTime(data.positionInTrack)}</span>
-      <span>${fmtTime(data.duration)}</span>
-    </div>
-    <button id="playBtn">▶</button>
-    ${data.upNext ? `<div class="up-next">Up next: <b>${escapeHtml(data.upNext.title)}</b> — ${escapeHtml(data.upNext.artist)}</div>` : ''}
-    <div class="file-meta">${escapeHtml(data.filename)}</div>
-  `;
-
-  document.getElementById('playBtn').addEventListener('click', () => {
-    if (!started) {
-      tuneIn(data);
-      started = true;
-      document.getElementById('playBtn').textContent = '❚❚';
-    } else if (audio.paused) {
-      audio.play();
-      document.getElementById('playBtn').textContent = '❚❚';
-    } else {
-      audio.pause();
-      document.getElementById('playBtn').textContent = '▶';
-    }
-  });
-}
-
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
 }
 
+function updatePlayingUI() {
+  const isPlaying = started && !audio.paused;
+  document.getElementById('onAirDot').classList.toggle('live', isPlaying);
+  document.getElementById('hintText').classList.toggle('hidden', isPlaying);
+  if (isPlaying) startVu(); else stopVu();
+}
+
+function render(data) {
+  const meta = document.getElementById('meta');
+
+  if (data.status === 'empty') {
+    meta.innerHTML = '<p class="status-msg">Nothing in rotation yet.</p>';
+    stopVu();
+    return;
+  }
+
+  meta.innerHTML = `
+    <p class="title">${escapeHtml(data.title)}</p>
+  `;
+}
+
 function tuneIn(data) {
   currentTrackId = data.id;
   audio.src = `/stream/${data.filename}`;
   audio.currentTime = data.positionInTrack;
-  audio.play().catch(err => console.warn('Playback blocked until user interacts:', err));
+  setupAnalyser();
+  audio.play()
+    .then(updatePlayingUI)
+    .catch(err => { console.warn('Playback blocked until user interacts:', err); updatePlayingUI(); });
 }
+
+document.getElementById('artWrap').addEventListener('click', () => {
+  if (!latestData || latestData.status === 'empty') return;
+
+  if (!started) {
+    started = true;
+    tuneIn(latestData);
+  } else if (audio.paused) {
+    audioCtx && audioCtx.resume();
+    audio.play().then(updatePlayingUI).catch(() => updatePlayingUI());
+  } else {
+    audio.pause();
+    updatePlayingUI();
+  }
+});
 
 async function poll() {
   try {
     const res = await fetch('/api/now-playing');
     const data = await res.json();
+    latestData = data;
 
     if (data.status === 'empty') {
       render(data);
       return;
     }
 
-    // Track changed underneath us — re-tune automatically if already playing
-    if (started && data.id !== currentTrackId) {
+    const isNewTrack = data.id !== currentTrackId;
+    if (started && isNewTrack) {
       tuneIn(data);
+    } else if (!started) {
+      currentTrackId = data.id;
     }
 
-    // Drift correction: if we've wandered more than 2s from where we should be, resync
     if (started && !audio.paused) {
       const expected = data.positionInTrack;
       const actual = audio.currentTime;
@@ -218,12 +377,6 @@ async function poll() {
     }
 
     render(data);
-
-    // Re-attach play button listener reference after re-render
-    if (started) {
-      const btn = document.getElementById('playBtn');
-      btn.textContent = audio.paused ? '▶' : '❚❚';
-    }
   } catch (err) {
     console.error('Poll failed', err);
   }
