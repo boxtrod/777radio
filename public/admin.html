@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radio Admin</title>
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --card: #16161a;
+    --accent: #ff4d4d;
+    --text: #f2f2f2;
+    --muted: #8a8a8f;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 14px; }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    margin: 24px 0;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .dropzone.drag { border-color: var(--accent); background: rgba(255,77,77,0.05); }
+  .dropzone input { display: none; }
+  button.upload-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  #status { font-size: 13px; color: var(--muted); min-height: 18px; margin-bottom: 20px; }
+  .track {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--card);
+    border-radius: 12px;
+    margin-bottom: 10px;
+  }
+  .track .meta { overflow: hidden; }
+  .track .meta .t { font-weight: 600; font-size: 14px; }
+  .track .meta .a { font-size: 12px; color: var(--muted); }
+  .track .dur { font-size: 12px; color: var(--muted); margin: 0 14px; white-space: nowrap; }
+  .track button.del {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .track button.del:hover { border-color: var(--accent); color: var(--accent); }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
+  a.view-link { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📻 Station Admin</h1>
+  <p class="sub">Upload tracks to add them to rotation. <a class="view-link" href="/" target="_blank">View live station →</a></p>
+
+  <div class="dropzone" id="dropzone">
+    <p>Drag audio files here, or click to browse</p>
+    <p style="font-size:12px;">MP3, WAV, OGG, M4A, FLAC, AAC — up to 200MB each</p>
+    <input type="file" id="fileInput" multiple accept=".mp3,.wav,.ogg,.m4a,.flac,.aac">
+    <button class="upload-btn" type="button" onclick="document.getElementById('fileInput').click()">Choose Files</button>
+  </div>
+  <div id="status"></div>
+
+  <h2 style="font-size:16px;">Rotation</h2>
+  <div id="playlist"></div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const playlistEl = document.getElementById('playlist');
+
+['dragenter','dragover'].forEach(ev =>
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); })
+);
+['dragleave','drop'].forEach(ev =>
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); })
+);
+dropzone.addEventListener('drop', e => {
+  if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) uploadFiles(e.target.files);
+});
+
+async function uploadFiles(files) {
+  const formData = new FormData();
+  for (const f of files) formData.append('audioFiles', f);
+
+  statusEl.textContent = `Uploading ${files.length} file(s)…`;
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.textContent = 'Error: ' + data.error;
+    } else {
+      statusEl.textContent = `Added ${data.added.length} track(s) to rotation.`;
+      loadPlaylist();
+    }
+  } catch (err) {
+    statusEl.textContent = 'Upload failed: ' + err.message;
+  }
+  fileInput.value = '';
+}
+
+function fmtDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+async function loadPlaylist() {
+  const res = await fetch('/api/playlist');
+  const tracks = await res.json();
+
+  if (tracks.length === 0) {
+    playlistEl.innerHTML = '<p class="empty">No tracks yet — upload something above.</p>';
+    return;
+  }
+
+  playlistEl.innerHTML = tracks.map(t => `
+    <div class="track" data-id="${t.id}">
+      <div class="meta">
+        <div class="t">${escapeHtml(t.title)}</div>
+        <div class="a">${escapeHtml(t.artist)}</div>
+      </div>
+      <div class="dur">${fmtDuration(t.duration)}</div>
+      <button class="del" onclick="deleteTrack('${t.id}')">Remove</button>
+    </div>
+  `).join('');
+}
+
+async function deleteTrack(id) {
+  if (!confirm('Remove this track from rotation?')) return;
+  await fetch(`/api/track/${id}`, { method: 'DELETE' });
+  loadPlaylist();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadPlaylist();
+</script>
+</body>
+</html>
