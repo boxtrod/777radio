@@ -9,7 +9,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const DATA_FILE = path.join(__dirname, 'data', 'playlist.json');
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'playlist.json');
+
+// Make sure the folders/files this app depends on actually exist.
+// Don't assume they were committed to git or pre-created by the host —
+// create them on boot if missing.
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, '[]');
+}
 
 // --- Admin auth ---
 // Username/password come from environment variables so the password is
