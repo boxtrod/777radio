@@ -3,91 +3,200 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Radio Admin</title>
+<title>777 Radio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0b0b0d;
-    --card: #16161a;
-    --accent: #ff4d4d;
-    --text: #f2f2f2;
-    --muted: #8a8a8f;
-    --border: rgba(255,255,255,0.08);
+    --ink: #1b3a2b;
+    --ink-soft: #5c7864;
+    --ink-faint: #a9baae;
+    --rule: #d3ddd6;
+    --ribbon: #d2352c;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 40px 20px;
-    background: var(--bg);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--text);
+    padding: 48px 20px;
+    background: #ffffff;
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    color: var(--ink);
   }
   .wrap { max-width: 640px; margin: 0 auto; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  p.sub { color: var(--muted); margin-top: 0; font-size: 14px; }
+
+  .header-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  h1 {
+    font-size: 18px;
+    letter-spacing: 1px;
+    margin: 0;
+  }
+  a.view-link {
+    color: var(--ink-soft);
+    font-size: 12px;
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule);
+  }
+  a.view-link:hover { color: var(--ink); border-color: var(--ink); }
+
+  p.sub {
+    color: var(--ink-soft);
+    margin: 0 0 28px;
+    font-size: 13px;
+  }
+
   .dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 14px;
-    padding: 40px 20px;
+    border: 1.5px dashed var(--rule);
+    padding: 36px 20px;
     text-align: center;
-    color: var(--muted);
-    margin: 24px 0;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
     cursor: pointer;
     transition: border-color 0.2s ease, background 0.2s ease;
   }
-  .dropzone.drag { border-color: var(--accent); background: rgba(255,77,77,0.05); }
-  .dropzone input { display: none; }
-  button.upload-btn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-    margin-top: 6px;
+  .dropzone.drag {
+    border-color: var(--ink);
+    background: rgba(27,58,43,0.03);
   }
-  #status { font-size: 13px; color: var(--muted); min-height: 18px; margin-bottom: 20px; }
-  .track {
+  .dropzone input { display: none; }
+  .dropzone p { margin: 0 0 4px; font-size: 14px; }
+  .dropzone p.hint { font-size: 11px; color: var(--ink-faint); margin-bottom: 14px; }
+
+  button.upload-btn {
+    background: #ffffff;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 8px 18px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  button.upload-btn:hover { background: var(--ink); color: #fff; }
+
+  #status {
+    font-size: 12px;
+    color: var(--ink-soft);
+    min-height: 16px;
+    margin: 10px 0 32px;
+    text-align: center;
+  }
+
+  .rotation-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
-    background: var(--card);
-    border-radius: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
-  .track .meta { overflow: hidden; }
-  .track .meta .t { font-weight: 600; font-size: 14px; }
-  .track .meta .a { font-size: 12px; color: var(--muted); }
-  .track .dur { font-size: 12px; color: var(--muted); margin: 0 14px; white-space: nowrap; }
+  h2 {
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0;
+    font-weight: 400;
+  }
+  .shuffle-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    user-select: none;
+  }
+  .shuffle-toggle input {
+    accent-color: var(--ink);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+  }
+  .shuffle-toggle.on { color: var(--ink); font-weight: 700; }
+
+  .track {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+    gap: 10px;
+    background: #ffffff;
+    transition: opacity 0.15s ease;
+  }
+  .track:last-child { border-bottom: none; }
+  .track.dragging {
+    opacity: 0.35;
+  }
+  .drag-handle {
+    color: var(--ink-faint);
+    font-size: 14px;
+    line-height: 1;
+    cursor: grab;
+    padding: 4px 2px;
+    user-select: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .track .title {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .track .dur {
+    font-size: 12px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
   .track button.del {
     background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 8px;
-    padding: 6px 10px;
-    cursor: pointer;
+    border: none;
+    color: var(--ink-faint);
+    font-family: inherit;
     font-size: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+    white-space: nowrap;
   }
-  .track button.del:hover { border-color: var(--accent); color: var(--accent); }
-  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
-  a.view-link { color: var(--muted); font-size: 13px; }
+  .track button.del:hover { color: var(--ribbon); }
+
+  .empty {
+    color: var(--ink-faint);
+    font-size: 13px;
+    text-align: center;
+    padding: 24px 0;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>📻 Station Admin</h1>
-  <p class="sub">Upload tracks to add them to rotation. <a class="view-link" href="/" target="_blank">View live station →</a></p>
+  <div class="header-row">
+    <h1>777 radio</h1>
+    <a class="view-link" href="/" target="_blank">view live station &rarr;</a>
+  </div>
+  <p class="sub">upload tracks to add them to rotation</p>
 
   <div class="dropzone" id="dropzone">
-    <p>Drag audio files here, or click to browse</p>
-    <p style="font-size:12px;">MP3, WAV, OGG, M4A, FLAC, AAC — up to 200MB each</p>
+    <p>drag audio files here, or click to browse</p>
+    <p class="hint">mp3, wav, ogg, m4a, flac, aac — up to 200mb each</p>
     <input type="file" id="fileInput" multiple accept=".mp3,.wav,.ogg,.m4a,.flac,.aac">
-    <button class="upload-btn" type="button" onclick="document.getElementById('fileInput').click()">Choose Files</button>
+    <button class="upload-btn" type="button" onclick="document.getElementById('fileInput').click()">choose files</button>
   </div>
   <div id="status"></div>
 
-  <h2 style="font-size:16px;">Rotation</h2>
+  <div class="rotation-header">
+    <h2>rotation</h2>
+    <label class="shuffle-toggle" id="shuffleToggle">
+      <input type="checkbox" id="shuffleCheckbox">
+      shuffle
+    </label>
+  </div>
   <div id="playlist"></div>
 </div>
 
@@ -114,18 +223,18 @@ async function uploadFiles(files) {
   const formData = new FormData();
   for (const f of files) formData.append('audioFiles', f);
 
-  statusEl.textContent = `Uploading ${files.length} file(s)…`;
+  statusEl.textContent = `uploading ${files.length} file(s)…`;
   try {
     const res = await fetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (data.error) {
-      statusEl.textContent = 'Error: ' + data.error;
+      statusEl.textContent = 'error: ' + data.error;
     } else {
-      statusEl.textContent = `Added ${data.added.length} track(s) to rotation.`;
+      statusEl.textContent = `added ${data.added.length} track(s) to rotation`;
       loadPlaylist();
     }
   } catch (err) {
-    statusEl.textContent = 'Upload failed: ' + err.message;
+    statusEl.textContent = 'upload failed: ' + err.message;
   }
   fileInput.value = '';
 }
@@ -136,26 +245,90 @@ function fmtDuration(sec) {
   return `${m}:${s.toString().padStart(2,'0')}`;
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+let currentTracks = [];
+
 async function loadPlaylist() {
   const res = await fetch('/api/playlist');
-  const tracks = await res.json();
+  currentTracks = await res.json();
+  renderPlaylist();
+}
 
-  if (tracks.length === 0) {
-    playlistEl.innerHTML = '<p class="empty">No tracks yet — upload something above.</p>';
+function renderPlaylist() {
+  if (currentTracks.length === 0) {
+    playlistEl.innerHTML = '<p class="empty">nothing in rotation yet</p>';
     return;
   }
 
-  playlistEl.innerHTML = tracks.map(t => `
+  playlistEl.innerHTML = currentTracks.map((t) => `
     <div class="track" data-id="${t.id}">
-      <div class="meta">
-        <div class="t">${escapeHtml(t.title)}</div>
-        <div class="a">${escapeHtml(t.artist)}</div>
-      </div>
+      <span class="drag-handle" draggable="true" title="Drag to reorder">&#8942;&#8942;</span>
+      <div class="title">${escapeHtml(t.title)}</div>
       <div class="dur">${fmtDuration(t.duration)}</div>
-      <button class="del" onclick="deleteTrack('${t.id}')">Remove</button>
+      <button class="del" onclick="deleteTrack('${t.id}')">remove</button>
     </div>
   `).join('');
 }
+
+async function saveOrder() {
+  const order = currentTracks.map(t => t.id);
+  await fetch('/api/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order }),
+  });
+}
+
+// --- Drag and drop reordering ---
+// Rows are moved live as real DOM nodes during dragover (rather than
+// re-rendering the list), since replacing the actively-dragged element's
+// own DOM node mid-drag would cancel the browser's native drag session.
+let draggedRow = null;
+
+playlistEl.addEventListener('dragstart', (e) => {
+  const handle = e.target.closest('.drag-handle');
+  if (!handle) return;
+  draggedRow = handle.closest('.track');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggedRow.dataset.id);
+  // Let the browser capture the drag image before we dim the source row
+  setTimeout(() => draggedRow.classList.add('dragging'), 0);
+});
+
+playlistEl.addEventListener('dragover', (e) => {
+  if (!draggedRow) return;
+  e.preventDefault(); // required to allow dropping
+  const row = e.target.closest('.track');
+  if (!row || row === draggedRow) return;
+
+  const rect = row.getBoundingClientRect();
+  const isAfter = e.clientY > rect.top + rect.height / 2;
+  playlistEl.insertBefore(draggedRow, isAfter ? row.nextSibling : row);
+});
+
+playlistEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+});
+
+playlistEl.addEventListener('dragend', () => {
+  if (!draggedRow) return;
+  draggedRow.classList.remove('dragging');
+
+  // Sync the in-memory order to match the DOM (which already reflects
+  // wherever the row was dropped), then persist it.
+  const newOrderIds = Array.from(playlistEl.children).map(el => el.dataset.id);
+  currentTracks = newOrderIds
+    .map(id => currentTracks.find(t => t.id === id))
+    .filter(Boolean);
+
+  draggedRow = null;
+  saveOrder();
+});
 
 async function deleteTrack(id) {
   if (!confirm('Remove this track from rotation?')) return;
@@ -163,13 +336,29 @@ async function deleteTrack(id) {
   loadPlaylist();
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+// --- Shuffle toggle ---
+const shuffleCheckbox = document.getElementById('shuffleCheckbox');
+const shuffleToggle = document.getElementById('shuffleToggle');
+
+async function loadShuffleState() {
+  const res = await fetch('/api/shuffle');
+  const data = await res.json();
+  shuffleCheckbox.checked = data.enabled;
+  shuffleToggle.classList.toggle('on', data.enabled);
 }
 
+shuffleCheckbox.addEventListener('change', async () => {
+  const enabled = shuffleCheckbox.checked;
+  shuffleToggle.classList.toggle('on', enabled);
+  await fetch('/api/shuffle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+});
+
 loadPlaylist();
+loadShuffleState();
 </script>
 </body>
 </html>

@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const DATA_DIR = path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'playlist.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // Make sure the folders/files this app depends on actually exist.
 // Don't assume they were committed to git or pre-created by the host —
@@ -19,6 +20,9 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, '[]');
+}
+if (!fs.existsSync(SETTINGS_FILE)) {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ shuffle: false, shuffledOrder: [] }));
 }
 
 // --- Admin auth ---
@@ -81,19 +85,65 @@ function savePlaylist(playlist) {
 
 let playlist = loadPlaylist();
 
+// --- Shuffle settings persistence ---
+// shuffledOrder holds track IDs in the order they'll actually broadcast
+// while shuffle is on. It's stored separately from `playlist` (the
+// admin's manually-arranged base order) so turning shuffle off always
+// cleanly restores the manual order, and reordering the base list doesn't
+// get clobbered by whatever shuffle happened to be doing.
+function loadSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+  } catch {
+    return { shuffle: false, shuffledOrder: [] };
+  }
+}
+
+function saveSettings() {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ shuffle: shuffleEnabled, shuffledOrder }, null, 2));
+}
+
+const settings = loadSettings();
+let shuffleEnabled = !!settings.shuffle;
+let shuffledOrder = Array.isArray(settings.shuffledOrder) ? settings.shuffledOrder : [];
+
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// The order tracks actually broadcast in right now: the manual playlist
+// order when shuffle is off, or the current shuffled sequence when it's on.
+function getPlayOrder() {
+  if (!shuffleEnabled) return playlist;
+
+  const byId = Object.fromEntries(playlist.map(t => [t.id, t]));
+  const ordered = shuffledOrder.map(id => byId[id]).filter(Boolean);
+  // Any tracks not yet represented in shuffledOrder (e.g. freshly uploaded
+  // before the insert logic ran) get appended so nothing silently drops
+  // out of rotation.
+  const missingIds = playlist.map(t => t.id).filter(id => !shuffledOrder.includes(id));
+  return [...ordered, ...missingIds.map(id => byId[id])];
+}
+
 // The moment the "radio station" started broadcasting.
 // All playback position math is relative to this fixed anchor,
 // so every listener computes the same "current" position.
 const STATION_START = Date.now();
 
 function getTotalDuration() {
-  return playlist.reduce((sum, t) => sum + t.duration, 0);
+  return getPlayOrder().reduce((sum, t) => sum + t.duration, 0);
 }
 
 // Given elapsed ms since station start, figure out which track is
 // "on air" right now and how far into it we are.
 function getNowPlaying() {
-  if (playlist.length === 0) return null;
+  const order = getPlayOrder();
+  if (order.length === 0) return null;
 
   const totalDuration = getTotalDuration();
   if (totalDuration <= 0) return null;
@@ -101,12 +151,13 @@ function getNowPlaying() {
   const elapsedSec = ((Date.now() - STATION_START) / 1000) % totalDuration;
 
   let acc = 0;
-  for (let i = 0; i < playlist.length; i++) {
-    const track = playlist[i];
+  for (let i = 0; i < order.length; i++) {
+    const track = order[i];
     if (elapsedSec < acc + track.duration) {
       return {
         track,
         index: i,
+        order,
         positionInTrack: elapsedSec - acc,
         serverTime: Date.now(),
       };
@@ -114,7 +165,7 @@ function getNowPlaying() {
     acc += track.duration;
   }
   // Fallback (floating point edge case) — first track, position 0
-  return { track: playlist[0], index: 0, positionInTrack: 0, serverTime: Date.now() };
+  return { track: order[0], index: 0, order, positionInTrack: 0, serverTime: Date.now() };
 }
 
 // --- Multer upload config ---
@@ -170,10 +221,10 @@ app.get('/api/now-playing', (req, res) => {
     positionInTrack: now.positionInTrack,
     serverTime: now.serverTime,
     uploadedAt: now.track.uploadedAt,
-    upNext: playlist[(now.index + 1) % playlist.length]
+    upNext: now.order[(now.index + 1) % now.order.length]
       ? {
-          title: playlist[(now.index + 1) % playlist.length].title,
-          artist: playlist[(now.index + 1) % playlist.length].artist,
+          title: now.order[(now.index + 1) % now.order.length].title,
+          artist: now.order[(now.index + 1) % now.order.length].artist,
         }
       : null,
   });
@@ -256,9 +307,18 @@ app.post('/api/upload', requireAdminAuth, upload.array('audioFiles', 20), async 
     };
     playlist.push(track);
     added.push(track);
+
+    if (shuffleEnabled) {
+      // Insert the new track into the current shuffled sequence at a random
+      // spot, rather than reshuffling everything (which would jarringly
+      // reorder tracks already queued up mid-broadcast).
+      const insertAt = Math.floor(Math.random() * (shuffledOrder.length + 1));
+      shuffledOrder.splice(insertAt, 0, track.id);
+    }
   }
 
   savePlaylist(playlist);
+  if (shuffleEnabled) saveSettings();
   res.json({ added });
 });
 
@@ -270,13 +330,19 @@ app.delete('/api/track/:id', requireAdminAuth, (req, res) => {
   const [removed] = playlist.splice(idx, 1);
   savePlaylist(playlist);
 
+  const orderIdx = shuffledOrder.indexOf(removed.id);
+  if (orderIdx !== -1) {
+    shuffledOrder.splice(orderIdx, 1);
+    saveSettings();
+  }
+
   const filePath = path.join(UPLOADS_DIR, removed.filename);
   fs.unlink(filePath, () => {});
 
   res.json({ removed });
 });
 
-// --- Reorder playlist ---
+// --- Reorder playlist (the manual/base order, used whenever shuffle is off) ---
 app.post('/api/reorder', requireAdminAuth, (req, res) => {
   const { order } = req.body; // array of track ids in desired order
   if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array of ids' });
@@ -289,6 +355,25 @@ app.post('/api/reorder', requireAdminAuth, (req, res) => {
 
   savePlaylist(playlist);
   res.json({ playlist });
+});
+
+// --- Shuffle state ---
+app.get('/api/shuffle', (req, res) => {
+  res.json({ enabled: shuffleEnabled });
+});
+
+app.post('/api/shuffle', requireAdminAuth, (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
+
+  shuffleEnabled = enabled;
+  if (shuffleEnabled) {
+    // Fresh shuffle every time it's turned on, so re-enabling gives a
+    // genuinely new order rather than picking up wherever it left off.
+    shuffledOrder = shuffleArray(playlist.map(t => t.id));
+  }
+  saveSettings();
+  res.json({ enabled: shuffleEnabled });
 });
 
 app.listen(PORT, () => {
