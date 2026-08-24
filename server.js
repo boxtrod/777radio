@@ -423,6 +423,14 @@ app.post('/api/shuffle', requireAdminAuth, (req, res) => {
     shuffledOrder = shuffleArray(playlist.map(t => t.id));
   }
   saveSettings();
+
+  // Unlike reordering (which waits for the current loop to finish so it
+  // never interrupts what's playing), toggling shuffle takes effect right
+  // away - this jumps the broadcast straight to a fresh loop in the newly
+  // chosen order, which may skip/change whatever's currently on air.
+  currentOrder = getPlayOrder();
+  loopStartTime = Date.now();
+
   res.json({ enabled: shuffleEnabled });
 });
 
