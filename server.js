@@ -130,34 +130,69 @@ function getPlayOrder() {
   return [...ordered, ...missingIds.map(id => byId[id])];
 }
 
-// The moment the "radio station" started broadcasting.
-// All playback position math is relative to this fixed anchor,
-// so every listener computes the same "current" position.
+// The moment the "radio station" started broadcasting. Used only to seed
+// the very first loop below.
 const STATION_START = Date.now();
 
-function getTotalDuration() {
-  return getPlayOrder().reduce((sum, t) => sum + t.duration, 0);
+// --- The currently-broadcasting loop ---
+// This is the key to reordering/shuffling without interrupting playback:
+// `currentOrder` is a frozen snapshot of track order, locked in for the
+// entire current pass through the rotation. Editing the playlist or
+// toggling shuffle updates `playlist`/`shuffledOrder` right away, but that
+// only changes what getPlayOrder() WOULD return - it has no effect on the
+// live broadcast until the current loop actually finishes and rolls over
+// to a fresh one, which is when refreshCurrentOrder() picks up the change.
+let currentOrder = getPlayOrder();
+let loopStartTime = STATION_START;
+
+function sumDuration(order) {
+  return order.reduce((sum, t) => sum + t.duration, 0);
+}
+
+function refreshCurrentOrder() {
+  const desired = getPlayOrder();
+  const currentTotal = sumDuration(currentOrder);
+
+  if (currentOrder.length === 0 || currentTotal <= 0) {
+    // Nothing was playable before (empty rotation, or all-zero durations) -
+    // pick up whatever's available now immediately, there's no "current
+    // broadcast" to protect.
+    currentOrder = desired;
+    loopStartTime = Date.now();
+    return;
+  }
+
+  const elapsedSinceLoopStart = (Date.now() - loopStartTime) / 1000;
+  if (elapsedSinceLoopStart >= currentTotal) {
+    // The current loop has fully played out (possibly more than once, if
+    // the server was asleep/unqueried for a while) - advance loopStartTime
+    // by however many complete cycles have passed, then swap in whatever
+    // order is now desired for the fresh loop that's starting.
+    const cyclesCompleted = Math.floor(elapsedSinceLoopStart / currentTotal);
+    loopStartTime += cyclesCompleted * currentTotal * 1000;
+    currentOrder = desired;
+  }
 }
 
 // Given elapsed ms since station start, figure out which track is
 // "on air" right now and how far into it we are.
 function getNowPlaying() {
-  const order = getPlayOrder();
-  if (order.length === 0) return null;
+  refreshCurrentOrder();
+  if (currentOrder.length === 0) return null;
 
-  const totalDuration = getTotalDuration();
+  const totalDuration = sumDuration(currentOrder);
   if (totalDuration <= 0) return null;
 
-  const elapsedSec = ((Date.now() - STATION_START) / 1000) % totalDuration;
+  const elapsedSec = (Date.now() - loopStartTime) / 1000;
 
   let acc = 0;
-  for (let i = 0; i < order.length; i++) {
-    const track = order[i];
+  for (let i = 0; i < currentOrder.length; i++) {
+    const track = currentOrder[i];
     if (elapsedSec < acc + track.duration) {
       return {
         track,
         index: i,
-        order,
+        order: currentOrder,
         positionInTrack: elapsedSec - acc,
         serverTime: Date.now(),
       };
@@ -165,7 +200,7 @@ function getNowPlaying() {
     acc += track.duration;
   }
   // Fallback (floating point edge case) — first track, position 0
-  return { track: order[0], index: 0, order, positionInTrack: 0, serverTime: Date.now() };
+  return { track: currentOrder[0], index: 0, order: currentOrder, positionInTrack: 0, serverTime: Date.now() };
 }
 
 // --- Multer upload config ---
@@ -334,6 +369,16 @@ app.delete('/api/track/:id', requireAdminAuth, (req, res) => {
   if (orderIdx !== -1) {
     shuffledOrder.splice(orderIdx, 1);
     saveSettings();
+  }
+
+  // Unlike reordering, deletion needs to take effect immediately - the
+  // underlying file is about to be removed from disk, so leaving it in the
+  // live broadcast snapshot would mean streaming a file that no longer
+  // exists. This can shift what's currently on air if the deleted track
+  // was mid-play, which is an unavoidable side effect of removing it live.
+  const currentOrderIdx = currentOrder.findIndex(t => t.id === removed.id);
+  if (currentOrderIdx !== -1) {
+    currentOrder.splice(currentOrderIdx, 1);
   }
 
   const filePath = path.join(UPLOADS_DIR, removed.filename);
