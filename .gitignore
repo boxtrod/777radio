@@ -1,7 +1,5 @@
 node_modules/
 .env
-uploads/*
-!uploads/.gitkeep
-data/playlist.json
+storage/
 *.log
 .DS_Store

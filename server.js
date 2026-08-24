@@ -8,8 +8,13 @@ const { parseFile } = require('music-metadata');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const DATA_DIR = path.join(__dirname, 'data');
+// Render (and most simple hosts) only support ONE persistent disk per
+// service. So instead of two separate mount points, everything that needs
+// to survive a restart lives under one shared root - PERSIST_DIR - with
+// uploads/ and data/ as subfolders of that single mounted disk.
+const PERSIST_DIR = process.env.PERSIST_DIR || path.join(__dirname, 'storage');
+const UPLOADS_DIR = path.join(PERSIST_DIR, 'uploads');
+const DATA_DIR = path.join(PERSIST_DIR, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'playlist.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
