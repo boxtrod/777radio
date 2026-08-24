@@ -33,6 +33,33 @@
     width: min(92vw, 720px);
   }
 
+  .page-content {
+    transition: filter 0.35s ease;
+  }
+  .page-content.blurred {
+    filter: blur(10px);
+    pointer-events: none;
+  }
+
+  .logo-row {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 0; /* set precisely by JS: halfway between viewport top and "click to play" */
+    z-index: 5;
+  }
+  .logo {
+    width: 54px;   /* 2x the previous size */
+    height: 54px;
+    cursor: pointer;
+    display: block;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.2s ease;
+  }
+  .logo.hidden {
+    display: none;
+  }
+
   .hint-text {
     text-align: center;
     font-size: 13px;
@@ -125,6 +152,39 @@
     margin-top: 22px;
   }
 
+  .offcuts-overlay {
+    position: fixed;
+    inset: 0;
+    padding: 45px 20px; /* keeps a clear border top/bottom/sides */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: var(--ribbon);
+    cursor: pointer;
+    z-index: 20;
+  }
+  .offcuts-overlay.hidden {
+    display: none;
+  }
+  .offcuts-inner {
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    text-align: center;
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    font-weight: 700;
+    line-height: 1.4;
+    /* font-size set dynamically by JS to fit the available space */
+  }
+  .offcuts-inner p {
+    margin: 0 0 1em;
+  }
+  .offcuts-inner p:last-child {
+    margin-bottom: 0;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .on-air-dot.live { animation: none; }
   }
@@ -132,13 +192,17 @@
 </head>
 <body>
   <div class="page">
-    <div class="hint-text" id="hintText">click to play</div>
-    <div class="dot-row"><span class="on-air-dot" id="onAirDot"></span></div>
-    <div class="art-wrap" id="artWrap" title="Play / pause">
-      <img class="art-photo" src="/assets/station-art.jpg" alt="777 Radio">
-      <canvas class="vu-overlay" id="vuCanvas"></canvas>
+    <div class="page-content" id="pageContent">
+      <div class="logo-row" id="logoRow"><img class="logo" id="logoImg" src="/assets/logo.png" alt="777 Offcuts Radio"></div>
+      <div class="hint-text" id="hintText">click to play</div>
+      <div class="dot-row"><span class="on-air-dot" id="onAirDot"></span></div>
+      <div class="art-wrap" id="artWrap" title="Play / pause">
+        <img class="art-photo" src="/assets/station-art.jpg" alt="777 Radio">
+        <canvas class="vu-overlay" id="vuCanvas"></canvas>
+      </div>
+      <div class="meta" id="meta"></div>
     </div>
-    <div class="meta" id="meta"></div>
+    <div class="offcuts-overlay hidden" id="offcutsOverlay"><div class="offcuts-inner" id="offcutsInner"></div></div>
   </div>
 
 <script>
@@ -349,6 +413,97 @@ document.getElementById('artWrap').addEventListener('click', () => {
     updatePlayingUI();
   }
 });
+
+// --- Logo <-> placeholder text overlay ---
+const logoImg = document.getElementById('logoImg');
+const offcutsOverlay = document.getElementById('offcutsOverlay');
+const offcutsInner = document.getElementById('offcutsInner');
+const logoRow = document.getElementById('logoRow');
+const hintTextEl = document.getElementById('hintText');
+
+// Position the logo exactly halfway between the top of the viewport and
+// "click to play", recalculated whenever layout could have shifted.
+function positionLogo() {
+  const hintTop = hintTextEl.getBoundingClientRect().top;
+  logoRow.style.top = Math.max(0, hintTop / 2) + 'px';
+}
+window.addEventListener('resize', positionLogo);
+window.addEventListener('load', positionLogo);
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(positionLogo);
+}
+positionLogo();
+
+const OFFCUTS_HTML = `
+<p>777 offcuts radio</p>
+<p>is a place for the things i was making during the creation of this album to live and be shared</p>
+<p>its like radio in the sense that you can&rsquo;t skip,<br>and when you press play you&rsquo;ll tune in wherever the broadcast is</p>
+<p>i wanted to find a way to share all these pieces beyond the standard way music is listened to</p>
+<p>you&rsquo;ll hear<br>voice memos,<br>demos,<br>production experiments,<br>songs i&rsquo;ve sampled,<br>remixes<br>maybe some poems<br>field recordings<br>and long improvisations</p>
+<p>i&rsquo;ll be updating it regularly</p>
+<p>tune in when you want, tune out when you want</p>
+<p>it will always be here</p>
+<p>stay curious,<br>boxtrod</p>
+`;
+
+function fitOffcutsText() {
+  const overlayPaddingPx = 45 * 2; // top + bottom, matches .offcuts-overlay padding
+  const availableHeight = window.innerHeight - overlayPaddingPx;
+
+  let fontSize = 30; // starting point, same as the old fixed size
+  offcutsInner.style.fontSize = fontSize + 'px';
+
+  // A few passes: shrinking font-size can change line-wrapping (and thus
+  // total height) non-linearly, so re-measure and adjust more than once.
+  for (let i = 0; i < 6; i++) {
+    const height = offcutsInner.scrollHeight;
+    if (height <= availableHeight) break;
+    const ratio = availableHeight / height;
+    fontSize = Math.max(9, fontSize * ratio * 0.97); // small safety margin
+    offcutsInner.style.fontSize = fontSize + 'px';
+  }
+}
+
+function fillOffcutsText() {
+  offcutsInner.innerHTML = OFFCUTS_HTML;
+  fitOffcutsText();
+}
+
+function showOffcuts() {
+  logoImg.classList.add('hidden');
+  document.getElementById('pageContent').classList.add('blurred');
+  // Unhide BEFORE measuring/fitting - while display:none, the element has
+  // no layout box, so scrollHeight would read as 0 and the shrink logic
+  // would never engage, leaving text at full (overflowing) size.
+  offcutsOverlay.classList.remove('hidden');
+  fillOffcutsText();
+}
+
+function hideOffcuts() {
+  offcutsOverlay.classList.add('hidden');
+  logoImg.classList.remove('hidden');
+  document.getElementById('pageContent').classList.remove('blurred');
+}
+
+logoImg.addEventListener('click', (e) => {
+  e.stopPropagation();
+  showOffcuts();
+});
+
+window.addEventListener('resize', () => {
+  if (!offcutsOverlay.classList.contains('hidden')) fitOffcutsText();
+});
+
+// While the overlay is showing, a click ANYWHERE dismisses it (intercepted
+// in the capture phase so it doesn't also trigger play/pause on the artwork
+// underneath in the same click).
+document.addEventListener('click', (e) => {
+  if (!offcutsOverlay.classList.contains('hidden')) {
+    e.stopPropagation();
+    e.preventDefault();
+    hideOffcuts();
+  }
+}, true);
 
 async function poll() {
   try {
