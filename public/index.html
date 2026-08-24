@@ -45,7 +45,7 @@
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    top: 0; /* set precisely by JS: halfway between viewport top and "click to play" */
+    top: 0; /* set precisely by JS: halfway between viewport top and "click 777 to spin" */
     z-index: 5;
   }
   .logo {
@@ -194,7 +194,7 @@
   <div class="page">
     <div class="logo-row" id="logoRow"><img class="logo" id="logoImg" src="/assets/logo.png" alt="777 Offcuts Radio"></div>
     <div class="page-content" id="pageContent">
-      <div class="hint-text" id="hintText">click to play</div>
+      <div class="hint-text" id="hintText">click 777 to spin</div>
       <div class="dot-row"><span class="on-air-dot" id="onAirDot"></span></div>
       <div class="art-wrap" id="artWrap" title="Play / pause">
         <img class="art-photo" src="/assets/station-art.jpg" alt="777 Radio">
@@ -422,7 +422,7 @@ const logoRow = document.getElementById('logoRow');
 const hintTextEl = document.getElementById('hintText');
 
 // Position the logo exactly halfway between the top of the viewport and
-// "click to play", recalculated whenever layout could have shifted.
+// "click 777 to spin", recalculated whenever layout could have shifted.
 function positionLogo() {
   const hintTop = hintTextEl.getBoundingClientRect().top;
   logoRow.style.top = Math.max(0, hintTop / 2) + 'px';
