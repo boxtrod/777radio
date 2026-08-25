@@ -226,44 +226,98 @@ let currentTrackId = null;
 let started = false;
 let latestData = null;
 
-// --- Web Audio + canvas VU visualizer ---
+// --- Web Audio + canvas flow-field visualizer ---
+// Instead of a bar-chart equalizer, each "7" gets its own audio-reactive
+// "point vortex" flow field - short green strands drift and swirl around
+// a couple of wandering centers per glyph (the same technique behind
+// those Apple-style swirling-particle screensavers), masked to the
+// numeral shapes exactly like the bars were.
 let audioCtx = null;
 let analyser = null;
 let freqData = null;
 let vuRafId = null;
 const canvas = document.getElementById('vuCanvas');
 const ctx = canvas.getContext('2d');
-const BARS_PER_GLYPH = 14;
-const BAR_GAP_RATIO = 0.35;
 
 // Per-glyph automatic gain: each "7" tracks its own recent peak loudness and
-// normalizes against it, so all three fill their own range based on their
-// own content - rather than a fixed multiplier, which either leaves quiet
-// bands looking dead or blows out already-loud ones once they saturate.
+// normalizes against it, so all three respond to their own content - rather
+// than a fixed multiplier, which either leaves quiet bands looking dead or
+// blows out already-loud ones once they saturate.
 const glyphPeaks = [30, 30, 30]; // small floor avoids amplifying near-silence into noise
 const PEAK_DECAY = 0.985;
 
-// Precise per-bar anchoring: for each of the 14 x-slices of each "7", the
-// actual top/bottom of that numeral's silhouette at that x-position (as
-// fractions of the artwork image, 1600x935). A "7" is diagonal, so this
-// varies a lot slice to slice — using it (rather than one bounding box per
-// glyph) means every bar fills real numeral space instead of mostly empty
-// bounding-box corners.
+// Bounding box of each "7" (fractions of the 1600x935 artwork), derived
+// from the precise per-column outline data below - just used to keep
+// particles spawning/wandering within roughly the right area; the CSS
+// mask is what actually clips them to the exact numeral silhouette.
 const GLYPHS = [
   {x0:0.0657,x1:0.3222,slots:[{t:0.2864,b:0.3525},{t:0.2156,b:0.3523},{t:0.1969,b:0.6432},{t:0.1956,b:0.6432},{t:0.1956,b:0.6429},{t:0.1956,b:0.6424},{t:0.1964,b:0.6426},{t:0.1964,b:0.6434},{t:0.1972,b:0.6434},{t:0.1982,b:0.5781},{t:0.1993,b:0.5034},{t:0.2006,b:0.4286},{t:0.2011,b:0.3528},{t:0.2017,b:0.2812}]},
   {x0:0.3192,x1:0.5788,slots:[{t:0.2754,b:0.3544},{t:0.203,b:0.3546},{t:0.1951,b:0.6603},{t:0.1956,b:0.6619},{t:0.1964,b:0.6634},{t:0.1972,b:0.6634},{t:0.198,b:0.6626},{t:0.1985,b:0.6611},{t:0.199,b:0.6595},{t:0.1993,b:0.5871},{t:0.1993,b:0.5071},{t:0.2001,b:0.4286},{t:0.2003,b:0.3528},{t:0.1993,b:0.2791}]},
   {x0:0.5962,x1:0.8606,slots:[{t:0.2714,b:0.3499},{t:0.1993,b:0.3515},{t:0.1917,b:0.353},{t:0.1922,b:0.6508},{t:0.193,b:0.6526},{t:0.1935,b:0.6553},{t:0.194,b:0.6579},{t:0.1959,b:0.6595},{t:0.1977,b:0.6574},{t:0.1985,b:0.5971},{t:0.2001,b:0.5128},{t:0.2009,b:0.4344},{t:0.2017,b:0.3596},{t:0.2025,b:0.2849}]}
-];
+].map(g => ({
+  ...g,
+  y0: Math.min(...g.slots.map(s => s.t)),
+  y1: Math.max(...g.slots.map(s => s.b)),
+}));
+
+const PARTICLES_PER_GLYPH = 38; // ~20% more than 32, for denser strands
+const STRAND_COLOR = '27,58,43'; // matches --ink, as an rgb() triple for use with alpha
+const TRAIL_LENGTH = 42; // cut further alongside PARTICLES_PER_GLYPH
+const TRAIL_SAMPLE_EVERY = 8; // record a new trail point every N frames -
+                               // spreads the trail out in space (making it
+                               // read as a long "string") without changing
+                               // how fast particles actually move
+
+// Two slowly-wandering "vortex" centers per glyph. Each one's position is a
+// smooth deterministic function of time (a Lissajous-style drift) rather
+// than random-walked, so motion stays continuous and never jitters or
+// teleports. sign flips rotation direction; strength gets scaled by audio.
+const vortices = GLYPHS.map((g, gi) => ([
+  { phaseX: gi * 1.7,       phaseY: gi * 2.3 + 1.1, driftX: 0.021, driftY: 0.017, radiusX: 0.34, radiusY: 0.5, sign: 1  },
+  { phaseX: gi * 0.9 + 3.1, phaseY: gi * 1.4 + 0.4, driftX: 0.014, driftY: 0.026, radiusX: 0.28, radiusY: 0.55, sign: -1 },
+]));
+
+let particles = []; // flat array across all glyphs; each has {gi, x, y, history: [[x,y], ...]}
+
+function spawnParticle(gi) {
+  const g = GLYPHS[gi];
+  // Positions are tracked in real canvas pixels (not fractions) everywhere
+  // else in the animation loop, so convert right away at spawn time.
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const x = (g.x0 + Math.random() * (g.x1 - g.x0)) * w;
+  const y = (g.y0 + Math.random() * (g.y1 - g.y0)) * h;
+  // Stagger each particle's sampling phase randomly so trail points don't
+  // all get recorded on the exact same frames across the whole swarm.
+  const sampleOffset = Math.floor(Math.random() * TRAIL_SAMPLE_EVERY);
+  // vx/vy is the particle's actual (smoothed) heading - see the turn-rate
+  // blending in drawFlow below.
+  return { gi, x, y, vx: 0, vy: 0, history: [[x, y]], frameCount: sampleOffset };
+}
+
+function initParticles() {
+  particles = [];
+  for (let gi = 0; gi < GLYPHS.length; gi++) {
+    for (let i = 0; i < PARTICLES_PER_GLYPH; i++) particles.push(spawnParticle(gi));
+  }
+}
 
 function sizeCanvas() {
   const wrap = document.getElementById('artWrap');
   const rect = wrap.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
+  // Retina displays report devicePixelRatio=2 or 3, meaning a full-DPR
+  // canvas rasterizes 4-9x the actual pixels for the same visual size -
+  // a real cost when drawing thousands of anti-aliased curve segments
+  // every frame. Capping it trades a small amount of crispness (invisible
+  // on soft, blurred, moving strands like these) for real frame-rate
+  // headroom.
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.3);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener('resize', sizeCanvas);
+sizeCanvas();
 sizeCanvas();
 
 function setupAnalyser() {
@@ -278,89 +332,224 @@ function setupAnalyser() {
   analyser.connect(audioCtx.destination);
 }
 
-// Compute log-spaced bin boundaries across [0, binCount) so each of `numBars`
-// groups covers a musically even slice of the spectrum (low bars = a couple
-// bass bins, high bars = a wide swath of treble bins) rather than plain
-// linear division, which is dominated entirely by the first few bass bins.
-function logBinEdges(numBars, binCount) {
+// Compute log-spaced bin boundaries across [0, binCount) so each of `numBands`
+// groups covers a musically even slice of the spectrum (low = a couple bass
+// bins, high = a wide swath of treble bins) rather than plain linear
+// division, which is dominated entirely by the first few bass bins.
+function logBinEdges(numBands, binCount) {
   const edges = [0];
   const minBin = 1; // avoid log(0)
-  for (let i = 1; i <= numBars; i++) {
-    const frac = i / numBars;
+  for (let i = 1; i <= numBands; i++) {
+    const frac = i / numBands;
     const bin = Math.round(minBin * Math.pow(binCount / minBin, frac));
     edges.push(Math.min(binCount, Math.max(edges[i - 1] + 1, bin)));
   }
   return edges;
 }
 
-function drawBars() {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  ctx.clearRect(0, 0, w, h);
+// One normalized (0-1, AGC'd) amplitude per glyph per frame - same
+// bass/mid/treble split used by the old bar meter, so the left "7" still
+// tracks bass, middle tracks mids, right tracks treble.
+const smoothedAmps = [0, 0, 0];
+const AMP_SMOOTHING = 0.15; // lower = smoother/slower to react, higher = snappier/spikier
 
-  if (!analyser) return;
+function getGlyphAmplitudes() {
+  if (!analyser) return smoothedAmps;
   analyser.getByteFrequencyData(freqData);
+  const edges = logBinEdges(GLYPHS.length, freqData.length);
 
-  ctx.fillStyle = '#1b3a2b';
+  GLYPHS.forEach((_, gi) => {
+    const startBin = edges[gi];
+    const endBin = edges[gi + 1];
+    let sum = 0, count = 0;
+    for (let b = startBin; b < endBin; b++) { sum += freqData[b] || 0; count++; }
+    const raw = count ? sum / count : 0;
 
-  // The full spectrum is split sequentially across all three glyphs (left =
-  // bass, middle = mids, right = treble) so each numeral represents a
-  // distinct band. Each glyph then self-normalizes against its own recent
-  // peak (see glyphPeaks) so all three genuinely respond to their own
-  // content, regardless of how much raw energy that band naturally carries.
-  const totalBars = GLYPHS.length * BARS_PER_GLYPH;
-  const nyquistBins = freqData.length;
-  const binEdges = logBinEdges(totalBars, nyquistBins);
+    glyphPeaks[gi] = Math.max(raw, glyphPeaks[gi] * PEAK_DECAY);
+    const normalized = Math.min(1, raw / glyphPeaks[gi]);
 
-  let barIndex = 0;
-
-  GLYPHS.forEach((glyph, glyphIdx) => {
-    const gx0 = glyph.x0 * w;
-    const gx1 = glyph.x1 * w;
-    const glyphWidth = gx1 - gx0;
-    const barSlot = glyphWidth / BARS_PER_GLYPH;
-    const barWidth = barSlot * (1 - BAR_GAP_RATIO);
-
-    // First pass: compute this glyph's raw bar values and its current max
-    const rawAvgs = [];
-    for (let i = 0; i < BARS_PER_GLYPH; i++) {
-      const startBin = binEdges[barIndex + i];
-      const endBin = binEdges[barIndex + i + 1];
-      let sum = 0;
-      let count = 0;
-      for (let b = startBin; b < endBin; b++) { sum += freqData[b] || 0; count++; }
-      rawAvgs.push(count ? sum / count : 0);
-    }
-    barIndex += BARS_PER_GLYPH;
-
-    const frameMax = Math.max(...rawAvgs);
-    // Peak rises instantly to a new loud moment, decays slowly otherwise -
-    // this is what lets a quiet band (like treble) still hit full height
-    // during its own loudest moments, without permanently amplifying hiss.
-    glyphPeaks[glyphIdx] = Math.max(frameMax, glyphPeaks[glyphIdx] * PEAK_DECAY);
-
-    for (let i = 0; i < BARS_PER_GLYPH; i++) {
-      const normalized = Math.min(255, (rawAvgs[i] / glyphPeaks[glyphIdx]) * 255);
-
-      const slot = glyph.slots[i];
-      const slotTop = slot.t * h;
-      const slotBottom = slot.b * h;
-      const slotHeight = slotBottom - slotTop;
-
-      const barHeight = Math.max(2, Math.min(slotHeight, (normalized / 255) * slotHeight * 1.05));
-      const x = gx0 + i * barSlot + (barSlot - barWidth) / 2;
-      const y = slotBottom - barHeight;
-      ctx.fillRect(x, y, barWidth, barHeight);
-    }
+    // Smooth the amplitude itself (not just the resulting motion) - some
+    // bands, especially mids (vocals, snare), naturally jump around far
+    // more frame-to-frame than bass or treble. Without smoothing the
+    // signal at its source, that same jumpiness feeds straight into the
+    // vortex strength and gives the turn-rate blending a much harder,
+    // spikier target to chase - which is exactly what read as sharp turns
+    // on the mid numeral specifically, even though the turn-smoothing
+    // itself was identical for all three.
+    smoothedAmps[gi] += (normalized - smoothedAmps[gi]) * AMP_SMOOTHING;
   });
 
-  vuRafId = requestAnimationFrame(drawBars);
+  return smoothedAmps;
+}
+
+let lastFrameTime = null;
+
+function drawFlow(timestamp) {
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+
+  const dt = lastFrameTime ? Math.min(48, timestamp - lastFrameTime) : 16;
+  lastFrameTime = timestamp;
+  const t = timestamp / 1000;
+
+  // Full clear every frame - each particle carries its OWN bounded-length
+  // trail (see TRAIL_LENGTH), so nothing accumulates across frames. That's
+  // what keeps density constant over a whole song instead of the old
+  // canvas-fade approach, which kept building up the longer it played.
+  ctx.clearRect(0, 0, w, h);
+
+  const amps = getGlyphAmplitudes();
+
+  // Current position + strength of every vortex, computed once per frame.
+  const liveVortices = vortices.map((pair, gi) => {
+    const g = GLYPHS[gi];
+    const cx = (g.x0 + g.x1) / 2 * w;
+    const cy = (g.y0 + g.y1) / 2 * h;
+    const amp = amps[gi];
+    return pair.map(v => ({
+      x: cx + Math.cos(t * v.driftX * 10 + v.phaseX) * v.radiusX * (g.x1 - g.x0) * w,
+      y: cy + Math.sin(t * v.driftY * 10 + v.phaseY) * v.radiusY * (g.y1 - g.y0) * h,
+      sign: v.sign,
+      strength: (0.35 + 1.5 * amp) * Math.min(w, h) * 0.55,
+    }));
+  });
+
+  const speedScale = dt / 16;
+
+  // Opacity is fixed (not audio-driven), so the shadow color/blur used for
+  // every strand's soft edge is identical too - set it once per frame
+  // instead of 270 times, which was likely the source of the stutter/
+  // "glitchy" feel (shadowBlur is one of the more expensive canvas ops,
+  // and re-setting it on every single stroke call adds up fast).
+  const STRAND_ALPHA = 0.65;
+  ctx.shadowColor = `rgba(${STRAND_COLOR},${STRAND_ALPHA * 0.4})`;
+  ctx.shadowBlur = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  for (let pi = 0; pi < particles.length; pi++) {
+    const p = particles[pi];
+    const g = GLYPHS[p.gi];
+    const amp = amps[p.gi];
+
+    let desiredVx = 0, desiredVy = 0;
+    for (const v of liveVortices[p.gi]) {
+      const dx = p.x - v.x;
+      const dy = p.y - v.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) + 1;
+      // Taper tangential speed to zero near the vortex core (rather than
+      // approaching a fixed nonzero speed even at dist=0), so proximity to
+      // a center alone can't demand an extreme direction.
+      const core = 34;
+      const taper = dist / (dist + core);
+      const falloff = (v.strength / (dist * 0.6 + 24)) * taper;
+      desiredVx += (-dy / dist) * falloff * v.sign;
+      desiredVy += (dx / dist) * falloff * v.sign;
+    }
+    // Gentle prevailing drift so strands advect outward rather than only
+    // orbiting forever in place.
+    desiredVx += 6;
+    desiredVy -= 3;
+
+    // The particle's ACTUAL heading only turns gradually toward wherever
+    // the field currently points, rather than snapping to it instantly -
+    // this is what actually prevents sharp 180-degree hooks (capping speed
+    // alone doesn't stop direction from reversing fast, only how far it
+    // travels while doing so).
+    const turnRate = 0.045 * speedScale;
+    p.vx += (desiredVx - p.vx) * turnRate;
+    p.vy += (desiredVy - p.vy) * turnRate;
+
+    const speedMag = Math.hypot(p.vx, p.vy);
+    const maxSpeed = 26;
+    if (speedMag > maxSpeed) {
+      p.vx = (p.vx / speedMag) * maxSpeed;
+      p.vy = (p.vy / speedMag) * maxSpeed;
+    }
+
+    p.x += p.vx * 0.02 * speedScale;
+    p.y += p.vy * 0.02 * speedScale;
+
+    // Two boundaries instead of one: particles fade out smoothly as they
+    // wander past fadeMargin, and only actually respawn once they're well
+    // past that at hardMargin - so a strand dissolves gracefully instead
+    // of an old trail just vanishing the instant it crosses a line.
+    const gx0 = g.x0 * w, gx1 = g.x1 * w, gy0 = g.y0 * h, gy1 = g.y1 * h;
+    const fadeMargin = 0.14 * (gx1 - gx0);
+    const hardMargin = 0.4 * (gx1 - gx0);
+    const outDist = Math.max(gx0 - p.x, 0, p.x - gx1, gy0 - p.y, p.y - gy1);
+
+    if (outDist > hardMargin) {
+      const fresh = spawnParticle(p.gi);
+      p.x = fresh.x;
+      p.y = fresh.y;
+      p.vx = 0;
+      p.vy = 0;
+      p.frameCount = fresh.frameCount;
+      p.history = [[p.x, p.y]]; // reset trail so it doesn't draw a long
+                                 // straight line back from the old spot
+      continue;
+    }
+    const fadeOut = outDist <= fadeMargin ? 1 : Math.max(0, 1 - (outDist - fadeMargin) / (hardMargin - fadeMargin));
+
+    // Only record a new trail point every TRAIL_SAMPLE_EVERY frames - the
+    // particle itself still moves smoothly every frame above, this just
+    // spaces out what gets remembered so a fixed number of points covers
+    // much more distance (a long "string") rather than a tight little
+    // squiggle of many closely-packed points.
+    p.frameCount++;
+    if (p.frameCount % TRAIL_SAMPLE_EVERY === 0) {
+      p.history.push([p.x, p.y]);
+      if (p.history.length > TRAIL_LENGTH) p.history.shift();
+    }
+
+    if (p.history.length < 2) continue;
+
+    // Newly (re)spawned strands fade in over their first ~20 trail points,
+    // and fade out again as they approach the boundary (fadeOut above) -
+    // symmetric in and out, nothing pops in or vanishes abruptly.
+    const growIn = Math.min(1, p.history.length / 20);
+    const opacityFactor = growIn * fadeOut;
+
+    // The whole visible strand is one path, stroked once with a gradient
+    // running along its length - full opacity at the tip (current
+    // position), fading to 20% at the tail end.
+    const tail = p.history[0];
+    const tip = p.history[p.history.length - 1];
+    const gradient = ctx.createLinearGradient(tail[0], tail[1], tip[0], tip[1]);
+    gradient.addColorStop(0, `rgba(${STRAND_COLOR},${STRAND_ALPHA * 0.2 * opacityFactor})`);
+    gradient.addColorStop(1, `rgba(${STRAND_COLOR},${STRAND_ALPHA * opacityFactor})`);
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 0.8 + 0.5 * amp;
+    ctx.beginPath();
+    ctx.moveTo(p.history[0][0], p.history[0][1]);
+    // Smooth curve through the trail points rather than straight segments -
+    // a quadratic curve through each pair's midpoint rounds off every
+    // joint, which is what actually reads as fluid motion rather than a
+    // faceted polyline, even when the underlying path is already smooth.
+    for (let hi = 1; hi < p.history.length - 1; hi++) {
+      const [x1, y1] = p.history[hi];
+      const [x2, y2] = p.history[hi + 1];
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      ctx.quadraticCurveTo(x1, y1, midX, midY);
+    }
+    const last = p.history[p.history.length - 1];
+    ctx.lineTo(last[0], last[1]);
+    ctx.stroke();
+  }
+
+  vuRafId = requestAnimationFrame(drawFlow);
 }
 
 function startVu() {
   document.getElementById('vuCanvas').classList.add('active');
   if (vuRafId) cancelAnimationFrame(vuRafId);
-  drawBars();
+  lastFrameTime = null;
+  initParticles();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  vuRafId = requestAnimationFrame(drawFlow);
 }
 function stopVu() {
   if (vuRafId) cancelAnimationFrame(vuRafId);
