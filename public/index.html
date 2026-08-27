@@ -610,7 +610,12 @@ document.getElementById('artWrap').addEventListener('click', () => {
     tuneIn(latestData);
   } else if (audio.paused) {
     audioCtx && audioCtx.resume();
-    audio.play().then(updatePlayingUI).catch(() => updatePlayingUI());
+    // Re-tune fresh to wherever the broadcast actually is right now,
+    // rather than resuming stale audio/position from whenever this was
+    // paused - matters if the rotation has moved on to a different track
+    // in the meantime, and matches how a real radio works (you don't
+    // pick up where you left off, you tune into whatever's live).
+    tuneIn(latestData);
   } else {
     audio.pause();
     updatePlayingUI();
@@ -720,7 +725,13 @@ async function poll() {
     }
 
     const isNewTrack = data.id !== currentTrackId;
-    if (started && isNewTrack) {
+    // Only auto-follow the rotation into a new track while actually
+    // playing. If paused, leave it alone entirely - a track change
+    // shouldn't resume playback the user explicitly stopped. (Resuming
+    // later re-tunes fresh to whatever's live then - see the click
+    // handler below - so there's no need to track currentTrackId here
+    // while paused.)
+    if (started && !audio.paused && isNewTrack) {
       tuneIn(data);
     } else if (!started) {
       currentTrackId = data.id;
