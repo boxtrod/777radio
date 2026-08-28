@@ -220,7 +220,7 @@
   </div>
 
 <script>
-const audio = new Audio();
+let audio = new Audio();
 audio.preload = 'auto';
 let currentTrackId = null;
 let started = false;
@@ -304,15 +304,23 @@ window.addEventListener('resize', sizeCanvas);
 sizeCanvas();
 
 function setupAnalyser() {
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.8;
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.connect(audioCtx.destination);
+  }
+  // Always wire up a fresh MediaElementSourceNode for whichever audio
+  // element is current, connected to the same persistent analyser. Some
+  // browsers have real bugs where reusing one source node across many
+  // .src reassignments on the same element silently breaks actual audio
+  // output, even though the element's own paused/currentTime state keeps
+  // reporting completely normally - a fresh element+source per track
+  // sidesteps that category of bug entirely.
   const source = audioCtx.createMediaElementSource(audio);
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.8;
-  freqData = new Uint8Array(analyser.frequencyBinCount);
   source.connect(analyser);
-  analyser.connect(audioCtx.destination);
 }
 
 // Deterministic pseudo-random hash (classic GLSL-style trick) - gives each
@@ -491,12 +499,23 @@ function render(data) {
 
 function tuneIn(data) {
   currentTrackId = data.id;
+
+  // A fresh audio element per track (see setupAnalyser() above for why),
+  // rather than reassigning .src on the same element repeatedly.
+  const oldAudio = audio;
+  audio = new Audio();
+  audio.preload = 'auto';
   audio.src = `/stream/${data.filename}`;
   audio.currentTime = data.positionInTrack;
-  setupAnalyser();
+
+  setupAnalyser(); // binds a fresh source node to the new audio element
+
   audio.play()
     .then(updatePlayingUI)
     .catch(err => { console.warn('Playback blocked until user interacts:', err); updatePlayingUI(); });
+
+  oldAudio.pause();
+  oldAudio.src = '';
 }
 
 document.getElementById('artWrap').addEventListener('click', () => {
