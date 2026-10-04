@@ -246,6 +246,12 @@ app.get('/api/playlist', (req, res) => {
   })));
 });
 
+// let boxtrod.com read what's playing (public, read-only)
+app.use('/api/now-playing', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
+});
+
 // --- API: what's playing right now ---
 app.get('/api/now-playing', (req, res) => {
   const now = getNowPlaying();
